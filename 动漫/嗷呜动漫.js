@@ -832,6 +832,8 @@ async function play(params) {
   let vodName = "";
   let episodeName = "";  
   let playMeta = {};
+  let originalVodName = "";
+  let originalEpisodeName = "";
   
   // 解析透传参数
   if (playId && playId.includes('|||')) {
@@ -849,6 +851,9 @@ async function play(params) {
     episodeName = parts[2] || "";
     logInfo(`解析透传信息 - 视频: ${vodName}, 集数: ${episodeName}`);
   }  
+
+  originalVodName = vodName;
+  originalEpisodeName = episodeName;
 
   let scrapedDanmuFileName = "";
   try {
@@ -932,8 +937,10 @@ async function play(params) {
     }  
     
     // 弹幕匹配
-    if (DANMU_API && vodName) {
-      const fileName = scrapedDanmuFileName || buildFileNameForDanmu(vodName, episodeName);
+    if (DANMU_API && (vodName || originalVodName)) {
+      const fallbackVodName = originalVodName || vodName;
+      const fallbackEpisodeName = originalEpisodeName || episodeName;
+      const fileName = scrapedDanmuFileName || buildFileNameForDanmu(fallbackVodName, fallbackEpisodeName);
       logInfo(`尝试匹配弹幕文件名: ${fileName}`);  
       
       if (fileName) {

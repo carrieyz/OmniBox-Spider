@@ -1,6 +1,9 @@
 /**
 * ============================================================================
-* 4KVM资源 - OmniBox 爬虫脚本
+* 4KVM
+* 刮削：支持
+* 弹幕：支持
+* 嗅探：支持
 * ============================================================================
 */
 const axios = require("axios");
@@ -30,6 +33,12 @@ const axiosInstance = axios.create({
     httpAgent: new http.Agent({ keepAlive: true })
 });
 
+const PLAY_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+    "Referer": "https://www.4kvm.org/",
+    "Origin": "https://www.4kvm.org"
+};
+
 /**
 * 日志工具函数
 */
@@ -57,6 +66,28 @@ const decodeMeta = (str) => {
     } catch {
         return {};
     }
+};
+
+/**
+ * 嗅探播放页，兜底提取真实视频地址
+ */
+const sniff4kvmPlay = async (playUrl) => {
+    if (!playUrl) return null;
+    try {
+        logInfo("尝试嗅探播放页", playUrl);
+        const sniffed = await OmniBox.sniffVideo(playUrl);
+        if (sniffed && sniffed.url) {
+            logInfo("嗅探成功", sniffed.url);
+            return {
+                urls: [{ name: "嗅探线路", url: sniffed.url }],
+                parse: 0,
+                header: sniffed.header || { ...PLAY_HEADERS, "Referer": playUrl }
+            };
+        }
+    } catch (error) {
+        logInfo(`嗅探失败: ${error.message}`);
+    }
+    return null;
 };
 
 const buildScrapedEpisodeName = (scrapeData, mapping, originalName) => {
@@ -979,7 +1010,7 @@ async function play(params) {
         let playResponse = {
             urls: [{ name: "4KVM", url: playId }],
             parse: 1,
-            header: config.headers
+            header: PLAY_HEADERS
         };
 
         // API调用
@@ -1036,6 +1067,13 @@ async function play(params) {
             }
         }
 
+        if (playResponse.parse === 1 && playResponse.urls[0]?.url) {
+            const sniffResult = await sniff4kvmPlay(playResponse.urls[0].url);
+            if (sniffResult) {
+                playResponse = sniffResult;
+            }
+        }
+
         OmniBox.log("info", `DANMU_API: ${DANMU_API}, params.vodName：${params.vodName}`);
 
         // 弹幕匹配
@@ -1057,10 +1095,14 @@ async function play(params) {
         return playResponse;
     } catch (error) {
         logError("播放解析失败", error);
+        const fallbackSniff = await sniff4kvmPlay(playId);
+        if (fallbackSniff) {
+            return fallbackSniff;
+        }
         return {
             urls: [{ name: "4KVM", url: playId }],
             parse: 1,
-            header: config.headers
+            header: PLAY_HEADERS
         };
     }
 }
