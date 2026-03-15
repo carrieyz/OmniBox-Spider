@@ -1,7 +1,7 @@
 // @name 盘搜
 // @author 
 // @description 刮削：支持，弹幕：支持，嗅探：支持
-// @version 1.0.1
+// @version 1.0.2
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/网盘/盘搜.js
 /**
  * OmniBox 网盘爬虫脚本
@@ -998,7 +998,7 @@ async function detail(params) {
     const playSources = [];
 
     // 确定播放源列表
-    let sourceNames = [videoId];
+    let sourceNames = ["直连"];
     const targetDriveTypes = DRIVE_TYPE_CONFIG;
     const configSourceNames = SOURCE_NAMES_CONFIG;
 
@@ -1127,7 +1127,7 @@ async function detail(params) {
 
         if (episodes.length > 0) {
           let finalSourceName = sourceName;
-          if (targetDriveTypes.includes(driveInfo.driveType)) {
+          if (DRIVE_TYPE_CONFIG.includes(driveInfo.driveType)) {
             finalSourceName = `${displayName}-${sourceName}`;
           }
 
@@ -1231,7 +1231,7 @@ async function detail(params) {
  *   - episodeName: 剧集名称（可选，用于添加观看记录）
  * @returns {Object} 播放地址
  */
-async function play(params) {
+async function play(params, context) {
   try {
     const flag = params.flag || "";
     const playId = params.playId || "";
@@ -1240,7 +1240,7 @@ async function play(params) {
 
     OmniBox.log(
       "info",
-      `播放参数: playId=${playId || ""}, vodId=${params.vodId || ""}, title=${params.title || ""}, episodeName=${params.episodeName || ""}`
+      `播放参数:  flag=${flag || ""}, playId=${playId || ""}, vodId=${params.vodId || ""}, title=${params.title || ""}, episodeName=${params.episodeName || ""}`
     );
 
     if (!playId) {
@@ -1391,6 +1391,8 @@ async function play(params) {
     }
 
     const playInfo = await OmniBox.getDriveVideoPlayInfo(shareURL, fileId, routeType);
+
+    OmniBox.log("info", `使用线路: ${routeType}`);
 
     if (!playInfo || !playInfo.url || !Array.isArray(playInfo.url) || playInfo.url.length === 0) {
       throw new Error("无法获取播放地址");
