@@ -1,8 +1,10 @@
 // @name 热播
 // @author 
 // @description 刮削：支持，弹幕：支持，嗅探：支持
-// @version 1.0.1
+// @dependencies: axios, crypto-js
+// @version 1.0.2
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/热播.js
+
 /**
  * OmniBox 爬虫脚本 - 热播（APP 接口）
  *
