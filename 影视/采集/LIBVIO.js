@@ -2,7 +2,7 @@
 // @author 梦
 // @description 刮削：未接入，弹幕：未接入，嗅探：不需要（直链优先，支持网盘线路展开）
 // @dependencies
-// @version 1.2.2
+// @version 1.2.3
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/openclaw/影视/采集/LIBVIO.js
 
 const http = require("http");
@@ -13,6 +13,7 @@ const runner = require("spider_runner");
 
 const HOST = "https://www.libvio.mov";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+const DEFAULT_PAGE_SIZE = 12;
 const panShareCache = new Map();
 
 const CLASS_LIST = [
