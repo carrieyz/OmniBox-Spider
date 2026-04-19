@@ -2,7 +2,7 @@
 # @name 木兮
 # @author 梦
 # @description 影视站：https://film.symx.club ，Python版，接入分类、搜索、详情与播放签名链路
-# @version 1.1.2
+# @version 1.2.0
 # @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/木兮.py
 # @dependencies cloudscraper,curl_cffi,Pillow,ddddocr,pycryptodome
 
@@ -82,6 +82,8 @@ TTL_SEARCH_MS = 20 * 1000
 TTL_PLAY_MS = 15 * 1000
 VERIFY_SOLVE_RETRIES = max(0, int(os.environ.get("MUXI_VERIFY_SOLVE_RETRIES", "1") or 1))
 VERIFY_SOLVE_RETRY_DELAY_MS = max(200, int(os.environ.get("MUXI_VERIFY_RETRY_DELAY_MS", "1000") or 1000))
+EXTERNAL_SLIDE_API = str(os.environ.get("MUXI_DDDDOCR_API") or os.environ.get("MUXI_SLIDE_OCR_API") or os.environ.get("DDDDOCR_API") or "").strip()
+EXTERNAL_SLIDE_PATH = str(os.environ.get("MUXI_DDDDOCR_PATH") or os.environ.get("MUXI_SLIDE_OCR_PATH") or "/slide").strip() or "/slide"
 
 CACHE = {}
 AUTH_CACHE_KEY = 'muxi:auth-state'
@@ -227,6 +229,14 @@ def get_cache(key, ttl_ms):
 
 def set_cache(key, data):
     CACHE[key] = {"ts": now_ms(), "data": data}
+
+
+def short_body(value, limit=320):
+    try:
+        text = value if isinstance(value, str) else json.dumps(value or {}, ensure_ascii=False)
+    except Exception:
+        text = str(value or '')
+    return text if len(text) <= limit else f"{text[:limit]}..."
 
 
 async def log(level, message):
@@ -687,6 +697,96 @@ async def fetch_geetest_load_py(captcha_id, challenge):
     return {'url': url, 'raw': text, 'data': data, 'headers': resp.get('headers') or {}, 'cookie': GEETEST_STATE.get('cookie', '')}
 
 
+async def request_external_gap_py(bg_buffer, slice_buffer=None):
+    if not EXTERNAL_SLIDE_API:
+        return None
+    try:
+        background_base64 = base64.b64encode(bg_buffer or b'').decode('utf-8')
+        target_base64 = base64.b64encode(slice_buffer or b'').decode('utf-8') if slice_buffer else ''
+        payload = {
+            'bg': background_base64,
+            'thumb': target_base64,
+            'type': 'match',
+        }
+        normalized_base = EXTERNAL_SLIDE_API.rstrip('/')
+        is_full_endpoint = normalized_base.startswith(('http://', 'https://')) and any(
+            token in normalized_base.lower() for token in ('/slide', '/slide_match', '/slide_comparison', '/ocr', '/det')
+        )
+        candidates = [normalized_base] if is_full_endpoint else [f"{normalized_base}{EXTERNAL_SLIDE_PATH}", normalized_base]
+
+        data = None
+        used_url = ''
+        for url in candidates:
+            await log('info', f"[木兮][verify] external ocr request api={url}")
+            resp = await raw_request(
+                url,
+                method='POST',
+                headers={
+                    'Content-Type': 'application/json',
+                    'User-Agent': UA,
+                },
+                body=json.dumps(payload, ensure_ascii=False),
+                timeout=20000,
+            )
+            parsed = safe_json_parse(resp.get('text') or '', {})
+            detail = ''
+            if isinstance(parsed, dict):
+                detail = str(parsed.get('detail') or '')
+            if int(resp.get('status') or 0) == 404 and 'Not Found' in detail and len(candidates) > 1 and url != candidates[-1]:
+                await log('warn', f"[木兮][verify] external ocr 404 fallback api={url}")
+                continue
+            data = parsed if parsed else {'raw': resp.get('text') or ''}
+            used_url = url
+            break
+
+        if not data:
+            return None
+
+        target = None
+        if isinstance(data, dict):
+            target = data.get('data', {}).get('target') if isinstance(data.get('data'), dict) else None
+            target = target or (data.get('result', {}).get('target') if isinstance(data.get('result'), dict) else None)
+            target = target or data.get('target') or data.get('data') or data.get('result') or data
+        else:
+            target = data
+
+        x = None
+        if isinstance(target, (list, tuple)) and len(target) >= 1:
+            try:
+                x = float(target[0])
+            except Exception:
+                x = None
+        elif isinstance(target, dict):
+            for key in ('x', 'target_x'):
+                if key in target:
+                    try:
+                        x = float(target.get(key))
+                        break
+                    except Exception:
+                        pass
+        if x is None and isinstance(data, dict):
+            for key_path in (('data', 'target_x'), ('x',), ('bestX',)):
+                try:
+                    if len(key_path) == 2 and isinstance(data.get(key_path[0]), dict) and key_path[1] in data.get(key_path[0]):
+                        x = float(data[key_path[0]][key_path[1]])
+                        break
+                    if len(key_path) == 1 and key_path[0] in data:
+                        x = float(data[key_path[0]])
+                        break
+                except Exception:
+                    pass
+
+        if x is not None:
+            await log('info', f"[木兮][verify] external ocr success api={used_url} x={x} body={short_body(data)}")
+            return {'bestX': max(0, round(x)), 'bestScore': 9999, 'engine': 'external-ddddocr', 'raw': data}
+
+        await log('warn', f"[木兮][verify] external ocr invalid api={used_url} body={short_body(data)}")
+        return None
+    except Exception as e:
+        await log('warn', f"[木兮][verify] external ocr failed api={EXTERNAL_SLIDE_API}: {e}")
+        return None
+
+
 def detect_gap_x_py(bg_buffer, ypos, slice_buffer=None):
     if ddddocr is not None and bg_buffer:
         try:
@@ -828,7 +928,13 @@ async def ensure_verify_token(force=False):
         if bg_url:
             bg_buffer = await get_buffer(bg_url, headers={'User-Agent': UA, 'referer': f'{HOST}/'})
             slice_buffer = await get_buffer(slice_url, headers={'User-Agent': UA, 'referer': f'{HOST}/'}) if slice_url else None
-            gap = detect_gap_x_py(bg_buffer, ypos, slice_buffer)
+            external_gap = await request_external_gap_py(bg_buffer, slice_buffer)
+            if external_gap:
+                gap = external_gap
+            else:
+                if EXTERNAL_SLIDE_API:
+                    await log('warn', f"[木兮][verify] external ocr unavailable api={EXTERNAL_SLIDE_API}")
+                gap = detect_gap_x_py(bg_buffer, ypos, slice_buffer)
         prepared = {
             'captchaId': captcha_id,
             'challenge': challenge,
