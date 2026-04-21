@@ -2,7 +2,7 @@
 # @name 人人电影
 # @author 梦
 # @description 影视站：https://www.rrdynb.com/ ，支持首页、分类、搜索、详情与网盘线路提取（Python版）
-# @version 1.1.8
+# @version 1.1.9
 # @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/网盘/人人电影.py
 
 import json
@@ -12,13 +12,36 @@ import re
 from urllib.parse import quote
 from spider_runner import OmniBox, run
 
+
+def split_config_list(value: str):
+    return [item.strip() for item in str(value or "").replace(",", ";").split(";") if item.strip()]
+
+
+# ==================== 配置区域开始 ====================
+# 站点基础地址。
 BASE_URL = "https://www.rrdynb.com"
+# 站点请求默认 User-Agent。
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
+
+# FlareSolverr 服务地址。留空表示不启用，需通过环境变量显式配置。
 RRDYNB_FLARESOLVERR_URL = str(os.environ.get("RRDYNB_FLARESOLVERR_URL") or "").strip()
+# FlareSolverr 会话名。用于复用已过验证的浏览器会话。
 RRDYNB_FLARESOLVERR_SESSION = str(os.environ.get("RRDYNB_FLARESOLVERR_SESSION") or "rrdynb-search").strip()
+# FlareSolverr 单次请求最大等待时间（毫秒）。
 RRDYNB_FLARESOLVERR_TIMEOUT_MS = max(10000, int(os.environ.get("RRDYNB_FLARESOLVERR_TIMEOUT_MS", "60000") or 60000))
+# 是否启用 FlareSolverr 搜索链路。
 RRDYNB_SEARCH_USE_FLARESOLVERR = str(os.environ.get("RRDYNB_SEARCH_USE_FLARESOLVERR", "true")).lower() == "true"
 
+# 网盘类型白名单。命中这些类型时才启用多线路（本地代理/服务端代理/直连）策略。
+DRIVE_TYPE_CONFIG = [item.lower() for item in split_config_list(os.environ.get("DRIVE_TYPE_CONFIG", "quark;uc"))]
+# 多线路展示名配置，默认顺序：本地代理 / 服务端代理 / 直连。
+SOURCE_NAMES_CONFIG = split_config_list(os.environ.get("SOURCE_NAMES_CONFIG", "本地代理;服务端代理;直连"))
+# 是否强制允许服务端代理；默认仅在宿主 baseURL 为私网时自动允许。
+EXTERNAL_SERVER_PROXY_ENABLED = str(os.environ.get("EXTERNAL_SERVER_PROXY_ENABLED", "false")).lower() == "true"
+# 网盘源排序优先级。
+DRIVE_ORDER = [item.lower() for item in split_config_list(os.environ.get("DRIVE_ORDER", "baidu;tianyi;quark;uc;115;xunlei;ali;123pan"))]
+
+# 分类映射配置。
 CATEGORY_MAP = {
     "movie": {"type_id": "2", "type_name": "电影", "path": "/movie/"},
     "tv": {"type_id": "6", "type_name": "电视剧", "path": "/dianshiju/"},
@@ -26,18 +49,11 @@ CATEGORY_MAP = {
     "anime": {"type_id": "13", "type_name": "动漫", "path": "/dongman/"},
 }
 TYPEID_TO_KEY = {v["type_id"]: k for k, v in CATEGORY_MAP.items()}
+# 可识别的视频扩展名。
 VIDEO_EXTS = (".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".m4v", ".ts", ".m2ts", ".webm", ".mpg", ".mpeg")
+# SDK 缓存默认 TTL（秒）。
 CACHE_EX_SECONDS = 3600
-
-
-def split_config_list(value: str):
-    return [item.strip() for item in str(value or "").replace(",", ";").split(";") if item.strip()]
-
-
-DRIVE_TYPE_CONFIG = [item.lower() for item in split_config_list(os.environ.get("DRIVE_TYPE_CONFIG", "quark;uc"))]
-SOURCE_NAMES_CONFIG = split_config_list(os.environ.get("SOURCE_NAMES_CONFIG", "本地代理;服务端代理;直连"))
-EXTERNAL_SERVER_PROXY_ENABLED = str(os.environ.get("EXTERNAL_SERVER_PROXY_ENABLED", "false")).lower() == "true"
-DRIVE_ORDER = [item.lower() for item in split_config_list(os.environ.get("DRIVE_ORDER", "baidu;tianyi;quark;uc;115;xunlei;ali;123pan"))]
+# ==================== 配置区域结束 ====================
 
 
 def abs_url(url: str) -> str:
