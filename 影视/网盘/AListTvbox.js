@@ -2,7 +2,7 @@
 // @author @sifanss
 // @description 必填参数：BASE_URL，XIAOYA_TOKEN。刮削：支持，弹幕：支持
 // @dependencies: axios
-// @version 1.0.5
+// @version 1.0.6
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/网盘/AListTvbox.js
 
 // 引入 OmniBox SDK
@@ -332,7 +332,7 @@ function preprocessTitle(title) {
     .replace(/[hH]\.?26[45]/g, " ")
     .replace(/BluRay|WEB-DL|HDR|REMUX/gi, " ")
     .replace(/\.mp4|\.mkv|\.avi|\.flv/gi, " ");
-} 
+}
 
 /**
 * 将中文数字转换为阿拉伯数字
@@ -677,6 +677,22 @@ async function detail(params, context) {
   }
 }
 
+function isValidUrl(str) {
+  // 空值直接返回 false
+  if (!str) return false;
+
+  try {
+    // 尝试用字符串构造 URL 对象
+    const url = new URL(str);
+
+    // 必须包含协议（http/https/ftp 等）才判定为有效 URL
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch (e) {
+    // 解析失败说明不是合法 URL
+    return false;
+  }
+}
+
 /**
  * 播放
  */
@@ -713,14 +729,14 @@ async function play(params) {
       };
     }
 
-    const data = await requestXiaoya(PLAY_PATH, { id: mainPlayId });
-    let urls = [{ name: "播放", url: mainPlayId }];
-    let header = {};
-
-    if (data && data.url) {
-      urls = buildPlayUrls(data.url);
-      header = typeof data.header === "string" ? JSON.parse(data.header) : data.header || {};
+    if (isValidUrl(mainPlayId)) {
+      mainPlayId = mainPlayId.split('/').pop()
     }
+
+    const data = await requestXiaoya(PLAY_PATH, { id: mainPlayId });
+    const urls = buildPlayUrls(data.url);
+    const header = typeof data.header === "string" ? JSON.parse(data.header) : data.header || {};
+
 
     OmniBox.log("info", `urls:${JSON.stringify(urls)}`)
 
